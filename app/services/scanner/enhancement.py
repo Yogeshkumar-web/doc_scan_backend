@@ -57,10 +57,17 @@ def enhance_auto(image_bgr: np.ndarray) -> EnhancementResult:
 
 
 def build_auto_candidates(image_bgr: np.ndarray) -> list[AutoCandidate]:
+    clean_grayscale = enhance_clean_grayscale(image_bgr)
+    clean_color = (
+        clean_grayscale
+        if is_low_saturation_document(image_bgr)
+        else enhance_clean_color(image_bgr)
+    )
+    print_clean = enhance_print_clean(image_bgr, fallback_gray_bgr=clean_grayscale)
     candidate_images = [
-        ("clean_color", enhance_clean_color(image_bgr)),
-        ("clean_grayscale", enhance_clean_grayscale(image_bgr)),
-        ("print_clean", enhance_print_clean(image_bgr)),
+        ("clean_color", clean_color),
+        ("clean_grayscale", clean_grayscale),
+        ("print_clean", print_clean),
     ]
 
     candidates: list[AutoCandidate] = []
@@ -148,17 +155,27 @@ def enhance_clean_color(image_bgr: np.ndarray) -> np.ndarray:
     return cleanup_document_color(image_bgr)
 
 
+def is_low_saturation_document(image_bgr: np.ndarray) -> bool:
+    hsv = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2HSV)
+    saturation = hsv[:, :, 1]
+    paper_like = hsv[:, :, 2] > int(np.percentile(hsv[:, :, 2], 35))
+    if not np.any(paper_like):
+        return False
+
+    return float(np.mean(saturation[paper_like])) < 40.0
+
+
 def enhance_clean_grayscale(image_bgr: np.ndarray) -> np.ndarray:
     return cv2.cvtColor(cleanup_document_gray(image_bgr), cv2.COLOR_GRAY2BGR)
 
 
-def enhance_print_clean(image_bgr: np.ndarray) -> np.ndarray:
+def enhance_print_clean(image_bgr: np.ndarray, fallback_gray_bgr: np.ndarray | None = None) -> np.ndarray:
     gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
     gray = cv2.medianBlur(gray, 3)
     normalized = normalize_for_ink_extraction(gray)
     ink_mask = remove_border_artifacts(extract_ink_mask(normalized))
     if not binary_threshold_is_safe(gray, normalized, ink_mask):
-        return enhance_clean_grayscale(image_bgr)
+        return fallback_gray_bgr if fallback_gray_bgr is not None else enhance_clean_grayscale(image_bgr)
 
     page = np.full_like(gray, 255)
     page[ink_mask > 0] = 0
@@ -458,12 +475,13 @@ def compute_stroke_metrics(gray: np.ndarray) -> dict[str, float]:
 def remove_large_mask_components(mask: np.ndarray, max_area_ratio: float) -> np.ndarray:
     total_area = mask.shape[0] * mask.shape[1]
     component_count, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
-    cleaned = np.zeros_like(mask)
-    for label in range(1, component_count):
-        area = stats[label, cv2.CC_STAT_AREA]
-        if area <= total_area * max_area_ratio:
-            cleaned[labels == label] = 255
-    return cleaned
+    if component_count <= 1:
+        return np.zeros_like(mask)
+
+    max_area = total_area * max_area_ratio
+    keep_labels = stats[:, cv2.CC_STAT_AREA] <= max_area
+    keep_labels[0] = False
+    return (keep_labels[labels].astype("uint8") * 255)
 
 
 def build_paper_mask(image_bgr: np.ndarray, gray: np.ndarray, text_mask: np.ndarray) -> np.ndarray:

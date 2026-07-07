@@ -4,7 +4,7 @@ import json
 class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     max_upload_size_mb: int = 15
-    scan_max_dimension: int = 2200
+    scan_max_dimension: int = 1400
     log_level: str = "INFO"
 
     @property

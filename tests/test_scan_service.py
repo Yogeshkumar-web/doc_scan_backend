@@ -10,6 +10,7 @@ from app.services.scanner.enhancement import (
     enhance_clean_grayscale,
     enhance_document as enhance_document_result,
     enhance_print_clean,
+    remove_large_mask_components,
 )
 
 @pytest.fixture
@@ -207,3 +208,14 @@ def test_clean_grayscale_removes_broad_shadow_without_thickening_text():
     assert float(np.mean(enhanced_gray[shadow_region])) > float(np.mean(source_gray[shadow_region])) + 90
     assert float(np.percentile(enhanced_gray[shadow_region], 10)) > 225
     assert compute_stroke_metrics(enhanced_gray)["median_stroke_width"] <= 3.2
+
+
+def test_remove_large_mask_components_keeps_small_components_only():
+    mask = np.zeros((100, 100), dtype="uint8")
+    cv2.rectangle(mask, (5, 5), (12, 12), 255, -1)
+    cv2.rectangle(mask, (40, 40), (95, 95), 255, -1)
+
+    cleaned = remove_large_mask_components(mask, max_area_ratio=0.05)
+
+    assert int(cleaned[8, 8]) == 255
+    assert int(cleaned[60, 60]) == 0
