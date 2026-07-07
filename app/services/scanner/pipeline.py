@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 
+from app.config import settings
 from app.services.scanner.detection import crop_document
 from app.services.scanner.enhancement import enhance_document
 from app.services.scanner.geometry import four_point_transform
@@ -13,7 +14,19 @@ def decode_image(image_bytes: bytes) -> np.ndarray:
     image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     if image is None:
         raise ValueError("Could not decode image")
-    return image
+    return resize_for_processing(image)
+
+
+def resize_for_processing(image: np.ndarray) -> np.ndarray:
+    max_dimension = max(800, int(settings.scan_max_dimension))
+    h, w = image.shape[:2]
+    max_side = max(h, w)
+    if max_side <= max_dimension:
+        return image
+
+    scale = max_dimension / max_side
+    new_size = (max(1, int(w * scale)), max(1, int(h * scale)))
+    return cv2.resize(image, new_size, interpolation=cv2.INTER_AREA)
 
 
 def build_pipeline_result(

@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 class ScanResponse(BaseModel):
     success: bool = True
     image_base64: str
+    image_mime_type: str = "image/jpeg"
     width: int
     height: int
     edge_detected: bool

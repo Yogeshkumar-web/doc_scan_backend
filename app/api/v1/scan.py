@@ -42,13 +42,17 @@ def process_full_image_job(image_bytes: bytes, mode: str):
 
 
 def encode_scan_result(result):
-    success, encoded_img = cv2.imencode(".png", result.image)
+    success, encoded_img = cv2.imencode(
+        ".jpg",
+        result.image,
+        [int(cv2.IMWRITE_JPEG_QUALITY), 92, int(cv2.IMWRITE_JPEG_OPTIMIZE), 1],
+    )
     if not success:
-        raise ValueError("Failed to encode processed image to PNG")
+        raise ValueError("Failed to encode processed image to JPEG")
 
     h, w = result.image.shape[:2]
     base64_str = base64.b64encode(encoded_img.tobytes()).decode("utf-8")
-    return base64_str, w, h, result
+    return base64_str, "image/jpeg", w, h, result
 
 
 async def read_validated_image(image: UploadFile) -> bytes:
@@ -64,10 +68,11 @@ async def read_validated_image(image: UploadFile) -> bytes:
     return image_bytes
 
 
-def build_scan_response(base64_str: str, w: int, h: int, result, mode: str) -> ScanResponse:
+def build_scan_response(base64_str: str, image_mime_type: str, w: int, h: int, result, mode: str) -> ScanResponse:
     return ScanResponse(
         success=True,
         image_base64=base64_str,
+        image_mime_type=image_mime_type,
         width=w,
         height=h,
         edge_detected=result.edge_detected,
@@ -96,12 +101,12 @@ async def scan(
     image_bytes = await read_validated_image(image)
 
     try:
-        base64_str, w, h, result = process_and_enhance_job(image_bytes, mode)
+        base64_str, image_mime_type, w, h, result = process_and_enhance_job(image_bytes, mode)
     except Exception as e:
         logger.error("processing_error", error=str(e), exc_info=True)
         raise ProcessingFailed(f"Failed to process image: {str(e)}")
 
-    return build_scan_response(base64_str, w, h, result, mode)
+    return build_scan_response(base64_str, image_mime_type, w, h, result, mode)
 
 
 @router.post("/scan/full-image", response_model=ScanResponse)
@@ -115,12 +120,12 @@ async def full_image_scan(
     image_bytes = await read_validated_image(image)
 
     try:
-        base64_str, w, h, result = process_full_image_job(image_bytes, mode)
+        base64_str, image_mime_type, w, h, result = process_full_image_job(image_bytes, mode)
     except Exception as e:
         logger.error("full_image_processing_error", error=str(e), exc_info=True)
         raise ProcessingFailed(f"Failed to process image: {str(e)}")
 
-    return build_scan_response(base64_str, w, h, result, mode)
+    return build_scan_response(base64_str, image_mime_type, w, h, result, mode)
 
 
 @router.post("/scan/manual-crop", response_model=ScanResponse)
@@ -135,9 +140,9 @@ async def manual_crop_scan(
     image_bytes = await read_validated_image(image)
 
     try:
-        base64_str, w, h, result = process_manual_crop_job(image_bytes, points_json, mode)
+        base64_str, image_mime_type, w, h, result = process_manual_crop_job(image_bytes, points_json, mode)
     except Exception as e:
         logger.error("manual_crop_processing_error", error=str(e), exc_info=True)
         raise ProcessingFailed(f"Failed to process image: {str(e)}")
 
-    return build_scan_response(base64_str, w, h, result, mode)
+    return build_scan_response(base64_str, image_mime_type, w, h, result, mode)

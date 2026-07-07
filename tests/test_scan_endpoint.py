@@ -20,6 +20,7 @@ from app.services.pdf_service import (
     _prepare_pdf_image,
     generate_pdf,
 )
+from app.config import settings
 
 
 class UploadStub:
@@ -53,6 +54,7 @@ async def test_scan_endpoint_success():
 
     assert response.success is True
     assert response.image_base64
+    assert response.image_mime_type == "image/jpeg"
     assert response.width > 0
     assert response.height > 0
     assert isinstance(response.edge_detected, bool)
@@ -105,6 +107,7 @@ async def test_manual_crop_endpoint_success():
 
     assert response.success is True
     assert response.image_base64
+    assert response.image_mime_type == "image/jpeg"
     assert response.width > 0
     assert response.height > 0
     assert response.edge_detected is True
@@ -125,6 +128,7 @@ async def test_full_image_endpoint_skips_auto_crop():
 
     assert response.success is True
     assert response.image_base64
+    assert response.image_mime_type == "image/jpeg"
     assert response.width == 220
     assert response.height == 260
     assert response.edge_detected is False
@@ -152,6 +156,19 @@ async def test_manual_crop_accepts_camera_jpg_content_type():
 
     assert response.success is True
     assert response.crop_method == "manual_corners"
+
+
+@pytest.mark.asyncio
+async def test_full_image_endpoint_limits_large_camera_image_dimensions():
+    img = np.full((3600, 2400, 3), 245, dtype="uint8")
+    cv2.putText(img, "DOC", (300, 900), cv2.FONT_HERSHEY_SIMPLEX, 6, (25, 25, 25), 12)
+    _, encoded = cv2.imencode(".jpg", img, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+
+    response = await full_image_endpoint(make_upload_file("large-camera.jpg", encoded.tobytes(), "image/jpeg"))
+
+    assert response.success is True
+    assert response.image_mime_type == "image/jpeg"
+    assert max(response.width, response.height) == settings.scan_max_dimension
 
 
 @pytest.mark.asyncio
