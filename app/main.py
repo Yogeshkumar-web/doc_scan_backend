@@ -20,7 +20,7 @@ app = FastAPI(
 # Setup CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=settings.cors_origin_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -35,4 +35,4 @@ app.include_router(api_v1_router, prefix="/api/v1")
 
 @app.on_event("startup")
 async def startup_event():
-    logger.info("startup_complete", cors_origins=settings.cors_origins, max_upload_size_mb=settings.max_upload_size_mb)
+    logger.info("startup_complete", cors_origins=settings.cors_origin_list, max_upload_size_mb=settings.max_upload_size_mb)
