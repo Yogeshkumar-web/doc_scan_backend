@@ -5,8 +5,8 @@ import img2pdf
 from PIL import Image
 
 
-PDF_IMAGE_MAX_DIMENSION = 2200
-PDF_JPEG_QUALITY = 85
+PDF_IMAGE_MAX_DIMENSION = 2400
+PDF_JPEG_QUALITY = 90
 
 
 def _decode_base64_image(page: str) -> bytes:

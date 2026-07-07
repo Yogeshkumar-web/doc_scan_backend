@@ -45,7 +45,7 @@ def encode_scan_result(result):
     success, encoded_img = cv2.imencode(
         ".jpg",
         result.image,
-        [int(cv2.IMWRITE_JPEG_QUALITY), 92, int(cv2.IMWRITE_JPEG_OPTIMIZE), 1],
+        [int(cv2.IMWRITE_JPEG_QUALITY), 95, int(cv2.IMWRITE_JPEG_OPTIMIZE), 1],
     )
     if not success:
         raise ValueError("Failed to encode processed image to JPEG")
