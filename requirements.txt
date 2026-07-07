@@ -1,0 +1,14 @@
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.8.0
+opencv-python-headless>=4.10.0
+numpy>=1.26.0
+scikit-image>=0.24.0
+img2pdf>=0.5.0
+Pillow>=10.4.0
+python-multipart>=0.0.9
+pydantic-settings>=2.4.0
+structlog>=24.4.0
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+httpx>=0.27.0
