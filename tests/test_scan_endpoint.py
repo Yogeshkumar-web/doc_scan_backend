@@ -190,6 +190,23 @@ async def test_pdf_generate_endpoint_success():
     assert len(response.content) > 0
 
 
+@pytest.mark.asyncio
+async def test_pdf_generate_files_endpoint_success():
+    img = np.zeros((60, 60, 3), dtype="uint8")
+    cv2.putText(img, "1", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+    _, encoded = cv2.imencode(".jpg", img)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.post(
+            "/api/v1/pdf/generate-files",
+            files=[("pages", ("page1.jpg", encoded.tobytes(), "image/jpeg"))],
+        )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.content.startswith(b"%PDF")
+
+
 def test_pdf_generation_compresses_large_png_page():
     rng = np.random.default_rng(123)
     img = np.full((1600, 1200, 3), 238, dtype="uint8")

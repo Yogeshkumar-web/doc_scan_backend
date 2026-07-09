@@ -38,8 +38,7 @@ def _fit_for_pdf(image: Image.Image) -> Image.Image:
     return image
 
 
-def _prepare_pdf_image(page: str) -> bytes:
-    image_bytes = _decode_base64_image(page)
+def _prepare_pdf_image_bytes(image_bytes: bytes) -> bytes:
     with Image.open(BytesIO(image_bytes)) as image:
         image = _fit_for_pdf(image)
         output = BytesIO()
@@ -52,6 +51,15 @@ def _prepare_pdf_image(page: str) -> bytes:
         return output.getvalue()
 
 
+def _prepare_pdf_image(page: str) -> bytes:
+    return _prepare_pdf_image_bytes(_decode_base64_image(page))
+
+
 def generate_pdf(base64_pages: list[str]) -> bytes:
     image_bytes_list = [_prepare_pdf_image(page) for page in base64_pages]
+    return img2pdf.convert(image_bytes_list)
+
+
+def generate_pdf_from_image_bytes(images: list[bytes]) -> bytes:
+    image_bytes_list = [_prepare_pdf_image_bytes(image) for image in images]
     return img2pdf.convert(image_bytes_list)

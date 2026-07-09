@@ -46,14 +46,44 @@ def enhance_document(image_bgr: np.ndarray, mode: str = "auto") -> EnhancementRe
 
 
 def enhance_auto(image_bgr: np.ndarray) -> EnhancementResult:
-    candidates = build_auto_candidates(image_bgr)
-    chosen = max(candidates, key=lambda candidate: candidate.score)
-    selected_warning = f"SELECTED_{chosen.name.upper()}"
+    selected_name = select_auto_candidate_name(image_bgr)
+    enhanced = enhance_selected_auto_candidate(image_bgr, selected_name)
+    metrics = with_selected_enhancement(compute_quality_metrics(enhanced), selected_name)
+    warning_mode = "print" if selected_name == "print_clean" else "gray"
+    warnings = warnings_for_quality(metrics, warning_mode)
+    selected_warning = f"SELECTED_{selected_name.upper()}"
     return EnhancementResult(
-        image=chosen.image,
-        metrics=with_selected_enhancement(chosen.metrics, chosen.name),
-        warnings=sorted(set([*chosen.warnings, selected_warning]), key=[*chosen.warnings, selected_warning].index),
+        image=enhanced,
+        metrics=metrics,
+        warnings=sorted(set([*warnings, selected_warning]), key=[*warnings, selected_warning].index),
     )
+
+
+def select_auto_candidate_name(image_bgr: np.ndarray) -> str:
+    preview = resize_for_auto_selection(image_bgr)
+    candidates = build_auto_candidates(preview)
+    return max(candidates, key=lambda candidate: candidate.score).name
+
+
+def resize_for_auto_selection(image_bgr: np.ndarray) -> np.ndarray:
+    max_side = max(image_bgr.shape[:2])
+    if max_side <= 900:
+        return image_bgr
+
+    scale = 900 / max_side
+    size = (
+        max(1, int(image_bgr.shape[1] * scale)),
+        max(1, int(image_bgr.shape[0] * scale)),
+    )
+    return cv2.resize(image_bgr, size, interpolation=cv2.INTER_AREA)
+
+
+def enhance_selected_auto_candidate(image_bgr: np.ndarray, selected_name: str) -> np.ndarray:
+    if selected_name == "clean_color":
+        return enhance_clean_color(image_bgr)
+    if selected_name == "print_clean":
+        return enhance_print_clean(image_bgr)
+    return enhance_clean_grayscale(image_bgr)
 
 
 def build_auto_candidates(image_bgr: np.ndarray) -> list[AutoCandidate]:
