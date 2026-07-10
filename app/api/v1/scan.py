@@ -23,7 +23,7 @@ def process_and_enhance_job(image_bytes: bytes, mode: str):
     return encode_scan_result(result)
 
 
-def process_manual_crop_job(image_bytes: bytes, points_json: str, mode: str):
+def process_manual_crop_job(image_bytes: bytes, points_json: str, mode: str, selected_enhancement: str | None = None):
     try:
         points = json.loads(points_json)
     except json.JSONDecodeError as exc:
@@ -32,7 +32,7 @@ def process_manual_crop_job(image_bytes: bytes, points_json: str, mode: str):
     if not isinstance(points, list):
         raise ValueError("Crop points must be a list")
 
-    result = process_document_with_corners(image_bytes, points, mode)
+    result = process_document_with_corners(image_bytes, points, mode, selected_enhancement=selected_enhancement)
     return encode_scan_result(result)
 
 
@@ -132,6 +132,7 @@ async def full_image_scan(
 async def manual_crop_scan(
     image: UploadFile = File(...),
     points_json: str = Form(...),
+    selected_enhancement: str | None = Form(None),
     mode: Annotated[str, Query(pattern="^(auto|print|color|gray|bw|soft)$")] = "auto",
 ):
     if mode not in SUPPORTED_ENHANCEMENT_MODES:
@@ -140,7 +141,12 @@ async def manual_crop_scan(
     image_bytes = await read_validated_image(image)
 
     try:
-        base64_str, image_mime_type, w, h, result = process_manual_crop_job(image_bytes, points_json, mode)
+        base64_str, image_mime_type, w, h, result = process_manual_crop_job(
+            image_bytes,
+            points_json,
+            mode,
+            selected_enhancement,
+        )
     except Exception as e:
         logger.error("manual_crop_processing_error", error=str(e), exc_info=True)
         raise ProcessingFailed(f"Failed to process image: {str(e)}")

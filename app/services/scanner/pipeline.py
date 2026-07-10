@@ -3,7 +3,7 @@ import numpy as np
 
 from app.config import settings
 from app.services.scanner.detection import crop_document
-from app.services.scanner.enhancement import enhance_document
+from app.services.scanner.enhancement import enhance_document, enhance_preselected_auto_candidate
 from app.services.scanner.geometry import four_point_transform
 from app.services.scanner.models import PipelineResult, QualityMetrics
 from app.services.scanner.quality import compute_quality_metrics
@@ -37,9 +37,13 @@ def build_pipeline_result(
     crop_confidence: float,
     crop_method: str,
     crop_warnings: list[str] | None = None,
+    selected_enhancement: str | None = None,
 ) -> PipelineResult:
     capture_metrics = compute_quality_metrics(crop_image)
-    enhancement = enhance_document(crop_image, mode)
+    if mode == "auto" and selected_enhancement:
+        enhancement = enhance_preselected_auto_candidate(crop_image, selected_enhancement)
+    else:
+        enhancement = enhance_document(crop_image, mode)
     metrics = QualityMetrics(
         background_whiteness=enhancement.metrics.background_whiteness,
         shadow_score=enhancement.metrics.shadow_score,
@@ -98,6 +102,7 @@ def process_document_with_corners(
     image_bytes: bytes,
     points: list[dict[str, float]],
     mode: str = "auto",
+    selected_enhancement: str | None = None,
 ) -> PipelineResult:
     image = decode_image(image_bytes)
     h, w = image.shape[:2]
@@ -124,4 +129,5 @@ def process_document_with_corners(
         crop_confidence=1.0,
         crop_method="manual_corners",
         crop_warnings=[],
+        selected_enhancement=selected_enhancement,
     )

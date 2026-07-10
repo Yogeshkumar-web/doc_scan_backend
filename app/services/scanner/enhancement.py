@@ -8,6 +8,7 @@ from app.services.scanner.models import EnhancementResult, QualityMetrics
 from app.services.scanner.quality import compute_quality_metrics, warnings_for_quality, with_selected_enhancement
 
 SUPPORTED_ENHANCEMENT_MODES = {"auto", "print", "color", "gray", "bw", "soft"}
+SUPPORTED_AUTO_CANDIDATES = {"clean_color", "clean_grayscale", "print_clean"}
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,13 @@ def enhance_document(image_bgr: np.ndarray, mode: str = "auto") -> EnhancementRe
 
 def enhance_auto(image_bgr: np.ndarray) -> EnhancementResult:
     selected_name = select_auto_candidate_name(image_bgr)
+    return enhance_preselected_auto_candidate(image_bgr, selected_name)
+
+
+def enhance_preselected_auto_candidate(image_bgr: np.ndarray, selected_name: str) -> EnhancementResult:
+    if selected_name not in SUPPORTED_AUTO_CANDIDATES:
+        return enhance_auto(image_bgr)
+
     enhanced = enhance_selected_auto_candidate(image_bgr, selected_name)
     metrics = with_selected_enhancement(compute_quality_metrics(enhanced), selected_name)
     warning_mode = "print" if selected_name == "print_clean" else "gray"

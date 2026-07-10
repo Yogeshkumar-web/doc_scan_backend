@@ -159,6 +159,29 @@ async def test_manual_crop_accepts_camera_jpg_content_type():
 
 
 @pytest.mark.asyncio
+async def test_manual_crop_can_reuse_previous_auto_enhancement():
+    img = np.full((260, 220, 3), 230, dtype="uint8")
+    cv2.putText(img, "DOC", (55, 125), cv2.FONT_HERSHEY_SIMPLEX, 1, (25, 25, 25), 2)
+    _, encoded = cv2.imencode(".jpg", img)
+
+    points = [
+        {"x": 0.05, "y": 0.05},
+        {"x": 0.95, "y": 0.05},
+        {"x": 0.95, "y": 0.95},
+        {"x": 0.05, "y": 0.95},
+    ]
+    response = await manual_crop_endpoint(
+        make_upload_file("camera.jpg", encoded.tobytes(), "image/jpeg"),
+        points_json=json.dumps(points),
+        selected_enhancement="clean_grayscale",
+    )
+
+    assert response.success is True
+    assert response.crop_method == "manual_corners"
+    assert response.selected_enhancement == "clean_grayscale"
+
+
+@pytest.mark.asyncio
 async def test_full_image_endpoint_limits_large_camera_image_dimensions():
     img = np.full((3600, 2400, 3), 245, dtype="uint8")
     cv2.putText(img, "DOC", (300, 900), cv2.FONT_HERSHEY_SIMPLEX, 6, (25, 25, 25), 12)
