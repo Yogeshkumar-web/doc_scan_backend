@@ -436,11 +436,44 @@ def background_kernel_size(image: np.ndarray) -> int:
     return odd_kernel(max(51, min(181, int(shorter_side * 0.12))))
 
 
+def resize_background_source(image: np.ndarray, max_side: int = 900) -> tuple[np.ndarray, float]:
+    source_max_side = max(image.shape[:2])
+    if source_max_side <= max_side:
+        return image, 1.0
+
+    scale = max_side / source_max_side
+    size = (
+        max(1, int(image.shape[1] * scale)),
+        max(1, int(image.shape[0] * scale)),
+    )
+    return cv2.resize(image, size, interpolation=cv2.INTER_AREA), scale
+
+
+def restore_background_map(background: np.ndarray, target_shape: tuple[int, int]) -> np.ndarray:
+    if background.shape[:2] == target_shape:
+        return background
+
+    return cv2.resize(
+        background,
+        (target_shape[1], target_shape[0]),
+        interpolation=cv2.INTER_CUBIC,
+    )
+
+
+def smooth_background_map(gray: np.ndarray, sigma: float) -> np.ndarray:
+    small, scale = resize_background_source(gray)
+    small_sigma = max(3.0, sigma * scale)
+    background = cv2.GaussianBlur(small, (0, 0), sigmaX=small_sigma)
+    return restore_background_map(background, gray.shape[:2])
+
+
 def correct_local_illumination(gray: np.ndarray, strength: float = 0.85, lift: int = 8) -> np.ndarray:
-    kernel_size = background_kernel_size(gray)
+    source, scale = resize_background_source(gray)
+    kernel_size = odd_kernel(max(21, int(background_kernel_size(gray) * scale)))
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
-    background = cv2.morphologyEx(gray, cv2.MORPH_CLOSE, kernel)
-    background = cv2.GaussianBlur(background, (0, 0), sigmaX=max(9, kernel_size / 6))
+    background = cv2.morphologyEx(source, cv2.MORPH_CLOSE, kernel)
+    background = cv2.GaussianBlur(background, (0, 0), sigmaX=max(3.0, kernel_size / 6))
+    background = restore_background_map(background, gray.shape[:2])
     target = float(np.percentile(background, 88))
     correction = (target - background.astype("float32")) * strength
     corrected = gray.astype("float32") + correction + lift
@@ -587,7 +620,7 @@ def remove_cast_shadows(
         return gray
 
     kernel_size = odd_kernel(max(91, min(301, int(min(gray.shape[:2]) * 0.20))))
-    background = cv2.GaussianBlur(gray, (0, 0), sigmaX=max(18, kernel_size / 4))
+    background = smooth_background_map(gray, sigma=max(18, kernel_size / 4))
     target = float(np.percentile(paper_pixels, 92))
     deficit = np.clip(target - background.astype("float32"), 0.0, 110.0)
     shadow_weight = np.clip(deficit / 85.0, 0.0, 1.0)
@@ -604,7 +637,7 @@ def normalize_paper_luminance(gray: np.ndarray, paper_mask: np.ndarray, strength
         return gray
 
     kernel_size = background_kernel_size(gray)
-    background = cv2.GaussianBlur(gray, (0, 0), sigmaX=max(12, kernel_size / 5))
+    background = smooth_background_map(gray, sigma=max(12, kernel_size / 5))
     target = float(np.percentile(paper_pixels, 88))
     normalized = gray.astype("float32") * target / np.maximum(background.astype("float32"), 1.0)
     weight = (paper_mask.astype("float32") / 255.0) ** 1.10

@@ -138,6 +138,28 @@ async def test_full_image_endpoint_skips_auto_crop():
 
 
 @pytest.mark.asyncio
+async def test_full_image_file_endpoint_returns_jpeg_with_metadata():
+    img = np.zeros((260, 220, 3), dtype="uint8")
+    cv2.rectangle(img, (35, 25), (185, 235), (245, 245, 245), -1)
+    cv2.putText(img, "DOC", (60, 120), cv2.FONT_HERSHEY_SIMPLEX, 1, (20, 20, 20), 2)
+    _, encoded = cv2.imencode(".png", img)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        response = await ac.post(
+            "/api/v1/scan/full-image-file",
+            files={"image": ("test.png", encoded.tobytes(), "image/png")},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/jpeg"
+    assert response.content.startswith(b"\xff\xd8")
+    metadata = json.loads(base64.urlsafe_b64decode(response.headers["x-scan-metadata"] + "=="))
+    assert metadata["success"] is True
+    assert metadata["image_mime_type"] == "image/jpeg"
+    assert metadata["crop_method"] == "full_image_confirmed"
+
+
+@pytest.mark.asyncio
 async def test_manual_crop_accepts_camera_jpg_content_type():
     img = np.zeros((260, 220, 3), dtype="uint8")
     cv2.rectangle(img, (35, 25), (185, 235), (245, 245, 245), -1)

@@ -2,7 +2,7 @@ import base64
 import cv2
 import json
 import structlog
-from fastapi import APIRouter, UploadFile, File, Form, Query
+from fastapi import APIRouter, Response, UploadFile, File, Form, Query
 from typing import Annotated
 from app.schemas.scan import ScanResponse
 from app.core.exceptions import InvalidFileType, FileTooLarge, ProcessingFailed
@@ -42,6 +42,12 @@ def process_full_image_job(image_bytes: bytes, mode: str):
 
 
 def encode_scan_result(result):
+    encoded_bytes, image_mime_type, w, h = encode_scan_image(result)
+    base64_str = base64.b64encode(encoded_bytes).decode("utf-8")
+    return base64_str, image_mime_type, w, h, result
+
+
+def encode_scan_image(result):
     success, encoded_img = cv2.imencode(
         ".jpg",
         result.image,
@@ -51,8 +57,7 @@ def encode_scan_result(result):
         raise ValueError("Failed to encode processed image to JPEG")
 
     h, w = result.image.shape[:2]
-    base64_str = base64.b64encode(encoded_img.tobytes()).decode("utf-8")
-    return base64_str, "image/jpeg", w, h, result
+    return encoded_img.tobytes(), "image/jpeg", w, h
 
 
 async def read_validated_image(image: UploadFile) -> bytes:
@@ -88,6 +93,34 @@ def build_scan_response(base64_str: str, image_mime_type: str, w: int, h: int, r
         processing_mode=mode,
         warnings=result.warnings,
     )
+
+
+def build_scan_metadata(image_mime_type: str, w: int, h: int, result, mode: str) -> dict:
+    return {
+        "success": True,
+        "image_mime_type": image_mime_type,
+        "width": w,
+        "height": h,
+        "edge_detected": result.edge_detected,
+        "confidence": result.crop_confidence,
+        "crop_confidence": result.crop_confidence,
+        "crop_method": result.crop_method,
+        "background_whiteness": result.metrics.background_whiteness,
+        "shadow_score": result.metrics.shadow_score,
+        "text_contrast": result.metrics.text_contrast,
+        "blur_score": result.metrics.blur_score,
+        "glare_score": result.metrics.glare_score,
+        "selected_enhancement": result.metrics.selected_enhancement,
+        "processing_mode": mode,
+        "warnings": result.warnings,
+    }
+
+
+def metadata_header(metadata: dict) -> str:
+    encoded = base64.urlsafe_b64encode(
+        json.dumps(metadata, separators=(",", ":")).encode("utf-8")
+    ).decode("ascii")
+    return encoded.rstrip("=")
 
 
 @router.post("/scan", response_model=ScanResponse)
@@ -126,6 +159,34 @@ async def full_image_scan(
         raise ProcessingFailed(f"Failed to process image: {str(e)}")
 
     return build_scan_response(base64_str, image_mime_type, w, h, result, mode)
+
+
+@router.post("/scan/full-image-file")
+async def full_image_scan_file(
+    image: UploadFile = File(...),
+    mode: Annotated[str, Query(pattern="^(auto|print|color|gray|bw|soft)$")] = "auto",
+):
+    if mode not in SUPPORTED_ENHANCEMENT_MODES:
+        mode = "auto"
+
+    image_bytes = await read_validated_image(image)
+
+    try:
+        result = process_full_document(image_bytes, mode)
+        encoded_bytes, image_mime_type, w, h = encode_scan_image(result)
+    except Exception as e:
+        logger.error("full_image_file_processing_error", error=str(e), exc_info=True)
+        raise ProcessingFailed(f"Failed to process image: {str(e)}")
+
+    metadata = build_scan_metadata(image_mime_type, w, h, result, mode)
+    return Response(
+        content=encoded_bytes,
+        media_type=image_mime_type,
+        headers={
+            "Content-Disposition": 'inline; filename="processed_scan.jpg"',
+            "X-Scan-Metadata": metadata_header(metadata),
+        },
+    )
 
 
 @router.post("/scan/manual-crop", response_model=ScanResponse)
